@@ -377,12 +377,27 @@ def _entries_for_route(
 
 
 def _route_model_cfg(entry: Dict[str, Any], model: str) -> Optional[Dict[str, Any]]:
-    """Return ``entry.models[model]`` when both are mappings, else None."""
+    """Return ``entry.models[model]`` when both are mappings, else None.
+
+    Aliased model ids discovered via ``/v1/models`` probing (e.g. ``cc/glm-5.3``
+    or ``ais-prod/qwen3.7-max`` on multiplexed relay endpoints) have no config
+    entry of their own. Let the alias inherit the bare model's mapping so a
+    prefixed duplicate of the same upstream model doesn't silently fall back to
+    generic hardcoded defaults (e.g. ``cc/glm-5.3`` -> 202752 while
+    ``glm-5.3`` -> 1048576).
+    """
     models = entry.get("models")
     if not isinstance(models, dict):
         return None
     model_cfg = models.get(model)
-    return model_cfg if isinstance(model_cfg, dict) else None
+    if isinstance(model_cfg, dict):
+        return model_cfg
+    bare = model.rsplit("/", 1)[-1] if "/" in model else model
+    if bare and bare != model:
+        model_cfg = models.get(bare)
+        if isinstance(model_cfg, dict):
+            return model_cfg
+    return None
 
 
 def _route_model_cfgs(
